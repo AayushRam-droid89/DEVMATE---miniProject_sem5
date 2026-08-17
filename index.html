@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DevMate — Deployment Readiness</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<svg class="svg-gradients" aria-hidden="true">
+  <defs>
+    <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#a78bfa" />
+    </linearGradient>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">DM</span>
+    <div>
+      <h1>DevMate</h1>
+      <p>Deployment Readiness Analyzer</p>
+    </div>
+  </div>
+  <nav class="tabs" aria-label="Main">
+    <button class="tab-btn active" data-tab="analyzer">🔍 Analyzer</button>
+    <button class="tab-btn" data-tab="academy">🎓 Academy</button>
+  </nav>
+  <label class="beginner-toggle">
+    <input type="checkbox" id="beginnerMode" checked>
+    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+    Beginner Mode
+  </label>
+</header>
+
+<main>
+  <div id="tab-analyzer" class="tab-panel active">
+
+  <section class="input-panel">
+    <div class="section-header">
+      <div class="section-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+      </div>
+      <div>
+        <h2>Paste your deployment files</h2>
+        <p class="hint">Drop a Dockerfile, Kubernetes manifest, or both — we'll scan for issues and give you a readiness score.</p>
+      </div>
+    </div>
+
+    <div class="config-row">
+      <div class="config-item">
+        <label for="analysisMode">🔍 Analyze</label>
+        <select id="analysisMode">
+          <option value="both">🐳 Dockerfile + ☸️ Kubernetes</option>
+          <option value="dockerfile">🐳 Dockerfile only</option>
+          <option value="k8s">☸️ Kubernetes only</option>
+        </select>
+      </div>
+      <div class="config-item">
+        <label for="severityFilter">📊 Min severity</label>
+        <select id="severityFilter">
+          <option value="all">All severities</option>
+          <option value="Low">🔵 Low and above</option>
+          <option value="Medium">🟡 Medium and above</option>
+          <option value="High">🟠 High and above</option>
+          <option value="Critical">🔴 Critical only</option>
+        </select>
+      </div>
+      <div class="config-item checkboxes">
+        <label title="Check if you have a documented rollback plan">
+          <input type="checkbox" id="rollbackCheck">
+          <span class="check-visual"></span>
+          Rollback strategy documented
+          <span class="tag">self-attested</span>
+        </label>
+        <label title="Check if docs are updated for this deployment">
+          <input type="checkbox" id="docsCheck">
+          <span class="check-visual"></span>
+          Documentation updated
+          <span class="tag">self-attested</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="input-grid">
+      <div class="input-card" id="dockerfileCard">
+        <div class="input-card-head">
+          <div class="card-label">
+            <span class="card-icon">🐳</span>
+            <h3>Dockerfile</h3>
+          </div>
+          <label class="upload-btn">📎 Upload<input type="file" id="dockerfileUpload" accept=".dockerfile,Dockerfile,text/plain"></label>
+        </div>
+        <textarea id="dockerfileInput" spellcheck="false" placeholder="FROM python:3.12-slim&#10;WORKDIR /app&#10;COPY . .&#10;CMD [&quot;python&quot;, &quot;app.py&quot;]"></textarea>
+      </div>
+
+      <div class="input-card" id="k8sCard">
+        <div class="input-card-head">
+          <div class="card-label">
+            <span class="card-icon">☸️</span>
+            <h3>Kubernetes Manifest</h3>
+          </div>
+          <label class="upload-btn">📎 Upload<input type="file" id="k8sUpload" accept=".yaml,.yml,text/plain"></label>
+        </div>
+        <textarea id="k8sInput" spellcheck="false" placeholder="apiVersion: apps/v1&#10;kind: Deployment&#10;metadata:&#10;  name: my-app&#10;spec:&#10;  replicas: 3&#10;  template:&#10;    spec:&#10;      containers:&#10;      - name: app&#10;        image: my-app:latest"></textarea>
+      </div>
+    </div>
+
+    <button id="analyzeBtn" class="btn-primary">
+      <span class="btn-icon">🔬</span>
+      <span class="btn-text">Analyze Deployment</span>
+      <span class="btn-spinner hidden"></span>
+    </button>
+    <p id="errorMsg" class="error-msg"></p>
+  </section>
+
+  <section id="resultsPanel" class="results-panel hidden">
+    <div class="section-header">
+      <div class="section-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div>
+        <h2>Readiness Report</h2>
+        <p class="hint">Detailed analysis of your deployment configuration.</p>
+      </div>
+    </div>
+
+    <div class="export-row">
+      <select id="exportFormat">
+        <option value="pdf">📄 PDF Report</option>
+        <option value="json">📋 JSON Data</option>
+        <option value="csv">📊 CSV Findings</option>
+      </select>
+      <button id="downloadBtn" class="btn-secondary">⬇ Download Report</button>
+    </div>
+
+    <div id="loadingSkeleton" class="skeleton-container hidden">
+      <div class="skeleton-score">
+        <div class="skeleton-circle"></div>
+        <div class="skeleton-lines">
+          <div class="skeleton-line w-30"></div>
+          <div class="skeleton-line w-60"></div>
+          <div class="skeleton-line w-50"></div>
+        </div>
+      </div>
+      <div class="skeleton-cols">
+        <div class="skeleton-col">
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        </div>
+        <div class="skeleton-col">
+          <div class="skeleton-card"></div>
+          <div class="skeleton-card"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultsContent" class="results-content hidden">
+      <div class="score-row">
+        <div class="score-gauge">
+          <svg viewBox="0 0 120 120" class="gauge-svg">
+            <circle cx="60" cy="60" r="52" class="gauge-bg"></circle>
+            <circle cx="60" cy="60" r="52" class="gauge-fg" id="gaugeCircle"></circle>
+          </svg>
+          <div class="gauge-label">
+            <span id="scoreValue">0</span>
+            <small>/ 100</small>
+          </div>
+        </div>
+        <div class="score-detail">
+          <div class="status-row">
+            <span id="statusBadge" class="status-badge">—</span>
+            <span id="profileNote" class="profile-note"></span>
+          </div>
+          <div class="severity-summary" id="severitySummary"></div>
+          <div id="categoryBars" class="category-bars"></div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="issues-col">
+          <div class="issues-header">
+            <h3>🔍 Findings</h3>
+            <span class="findings-count" id="findingsCount">0 issues</span>
+          </div>
+          <input type="text" id="findingsSearch" class="findings-search" placeholder="Search findings...">
+          <div id="findingsList" class="findings-list"></div>
+          <p id="findingsEmptyState" class="empty-state hidden">✨ No findings match your filter.</p>
+        </div>
+
+        <div class="side-col">
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-icon">✅</span>
+              <h3>Governance Checklist</h3>
+            </div>
+            <div id="governanceList" class="governance-list"></div>
+          </div>
+          <div class="panel-card">
+            <div class="panel-card-header">
+              <span class="panel-icon">📈</span>
+              <h3>Improvement Roadmap</h3>
+            </div>
+            <ol id="roadmapList" class="roadmap-list"></ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  </div>
+
+  <section id="tab-academy" class="tab-panel hidden">
+    <div class="academy-hero">
+      <h2>🎓 DevMate Academy</h2>
+      <p>Master every rule the analyzer checks — learn the <em>why</em>, pass the quiz, then prove it by fixing your own deployment files.</p>
+      <div class="academy-progress">
+        <div class="progress-block">
+          <span class="progress-label">🐳 Dockerfile Mastery</span>
+          <div class="progress-track"><div id="dockerProgressBar" class="progress-fill docker"></div></div>
+          <span id="dockerProgressText" class="progress-text">0 / 5</span>
+        </div>
+        <div class="progress-block">
+          <span class="progress-label">☸️ Kubernetes Mastery</span>
+          <div class="progress-track"><div id="k8sProgressBar" class="progress-fill k8s"></div></div>
+          <span id="k8sProgressText" class="progress-text">0 / 7</span>
+        </div>
+      </div>
+      <div id="xpDisplay" class="xp-display">⭐ XP: <span id="xpValue">0</span></div>
+    </div>
+
+    <div id="badgesPanel" class="badges-panel">
+      <div class="badges-heading-row">
+        <div class="badges-heading">🏆 Badges</div>
+        <button id="flashcardsBtn" class="flashcards-launch-btn">🃰 Flashcards</button>
+      </div>
+      <div id="badgesList" class="badges-list"></div>
+    </div>
+
+    <div id="certificatePanel" class="certificate-panel">
+      <div class="cert-panel-header">🎓 Academy Certificate</div>
+      <div id="certPanelContent" class="cert-panel-content"></div>
+      <div class="cert-divider"></div>
+      <div class="cert-verification-box">
+        <span class="verify-heading">🔎 Verify Certificate</span>
+        <p class="verify-session-note">
+          ℹ️ <strong>Session-Only Verification:</strong> Certificates exist in volatile browser session memory. Refreshing resets state.
+        </p>
+        <div class="verification-input-group">
+          <input type="text" id="verifyCertIdInput" class="verify-input" placeholder="Enter Certificate ID (e.g., DM-CERT-...)" autocomplete="off">
+          <button id="verifyCertBtn" class="verify-btn">Verify</button>
+        </div>
+        <div id="verifyCertResult" class="verify-result hidden"></div>
+      </div>
+    </div>
+
+    <div class="lesson-filters">
+  <input type="text" id="academySearch" class="academy-search" placeholder="🔎 Search lessons..." autocomplete="off">
+  <select id="difficultyFilter" class="difficulty-filter">
+    <option value="all">🎚️ All difficulties</option>
+    <option value="Beginner">🟢 Beginner</option>
+    <option value="Intermediate">🟡 Intermediate</option>
+    <option value="Advanced">🟠 Advanced</option>
+    <option value="Expert">🔴 Expert</option>
+  </select>
+  <button class="filter-btn active" data-filter="all">All lessons</button>
+  <button class="filter-btn" data-filter="dockerfile">🐳 Dockerfile</button>
+  <button class="filter-btn" data-filter="k8s">☸️ Kubernetes</button>
+  <button class="filter-btn" data-filter="mastered">✅ Mastered</button>
+</div>
+
+    <div id="lessonGrid" class="lesson-grid"></div>
+    <p id="lessonEmptyState" class="empty-state hidden">🔎 No lessons match your search or filter.</p>
+
+    <div id="lessonView" class="lesson-view hidden">
+      <button id="lessonBackBtn" class="back-btn">← Back to Academy</button>
+      <div id="lessonContent"></div>
+    </div>
+
+    <div id="flashcardsView" class="flashcards-view hidden">
+      <div class="fc-toolbar">
+        <button id="fcBackBtn" class="back-btn">← Back to Academy</button>
+        <div class="fc-controls">
+          <select id="fcCategory" class="fc-select">
+            <option value="all">📚 All lessons</option>
+            <option value="dockerfile">🐳 Dockerfile</option>
+            <option value="k8s">☸️ Kubernetes</option>
+          </select>
+          <button id="fcShuffleBtn" class="fc-btn">🔀 Shuffle</button>
+          <button id="fcRestartBtn" class="fc-btn">🔄 Restart</button>
+        </div>
+      </div>
+      <div class="fc-progress-row">
+        <span id="fcCounter" class="fc-counter">Card 1 of 12</span>
+        <div class="fc-pip-track"><div id="fcPipFill" class="fc-pip-fill"></div></div>
+      </div>
+      <div id="fcCard" class="fc-card" role="button" aria-label="Flip card" tabindex="0">
+        <div class="fc-card-inner">
+          <div class="fc-face fc-front">
+            <span class="fc-source-tag" id="fcSourceTag"></span>
+            <div class="fc-front-id" id="fcFrontId"></div>
+            <div class="fc-front-title" id="fcFrontTitle"></div>
+            <div class="fc-front-prompt">What is the risk and best fix?</div>
+            <div class="fc-flip-hint">👆 Click to reveal</div>
+          </div>
+          <div class="fc-face fc-back">
+            <div class="fc-back-section">
+              <div class="fc-back-label">🔍 Risk</div>
+              <div id="fcBackWhy" class="fc-back-text"></div>
+            </div>
+            <div class="fc-back-section">
+              <div class="fc-back-label">✅ Fix</div>
+              <div id="fcBackFix" class="fc-back-text"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="fc-nav">
+        <button id="fcPrevBtn" class="fc-btn" disabled>← Prev</button>
+        <button id="fcNextBtn" class="fc-btn">Next →</button>
+      </div>
+      <div id="fcComplete" class="fc-complete hidden">
+        <div class="fc-complete-icon">🎉</div>
+        <div class="fc-complete-title">Flashcard session complete!</div>
+        <div class="fc-complete-sub" id="fcCompleteXpMsg"></div>
+        <button id="fcCompleteRestartBtn" class="fc-btn fc-btn-primary">Play again</button>
+        <button id="fcCompleteShuffle" class="fc-btn">🔀 Shuffle &amp; replay</button>
+      </div>
+    </div>
+
+    <div id="certificateView" class="certificate-view hidden">
+      <button id="certBackBtn" class="back-btn">← Back to Academy</button>
+      <div class="certificate-paper" id="certificatePaper"></div>
+      <div class="cert-actions">
+        <button id="certPrintBtn" class="fc-btn fc-btn-primary">🖨️ Print / Save PDF</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <p>DevMate Public — Prototype · Analyses use pattern detection as a stand-in for Hadolint/KubeLinter.</p>
+</footer>
+
+<div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+<script src="lesson.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
