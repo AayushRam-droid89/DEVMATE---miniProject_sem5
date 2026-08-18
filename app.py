@@ -2,6 +2,9 @@ from flask import Flask, request, jsonify, Response, send_from_directory
 from flask_cors import CORS
 import re
 import yaml
+import subprocess
+import json as _json
+import shutil
 
 app = Flask(__name__)
 CORS(app)
@@ -586,6 +589,290 @@ def serve_css():
 @app.route("/script.js")
 def serve_js():
     return send_from_directory(app.root_path, "script.js")
+
+
+# ═══════════════════════════════════════════════════════
+#  PHASE 2.5 — DOCKER IMAGE ANALYSIS
+# ═══════════════════════════════════════════════════════
+
+# Safe image-reference regex: allows registry/path:tag and @sha256 digest notation.
+_IMAGE_REF_RE = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_.\-/:@]{0,254}$')
+
+
+def validate_image_ref(ref):
+    """Return a sanitised image reference string, or None if the input is invalid."""
+    if not ref or not isinstance(ref, str):
+        return None
+    ref = ref.strip()
+    if not ref or not _IMAGE_REF_RE.match(ref):
+        return None
+    return ref
+
+
+def _run_cmd(args, timeout=20):
+    """Run a subprocess safely.  Returns (stdout, stderr, returncode)."""
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        return result.stdout, result.stderr, result.returncode
+    except FileNotFoundError:
+        return None, "__not_found__", -1
+    except subprocess.TimeoutExpired:
+        return None, "__timeout__", -1
+    except Exception as exc:
+        return None, str(exc), -1
+
+
+def docker_inspect_image(image_ref):
+    """
+    Run ``docker inspect --type=image <image_ref>``.
+    Returns (inspect_list, error_code) where error_code is None on success or
+    one of: 'docker_unavailable', 'image_not_found', or a plain error string.
+    """
+    stdout, stderr, rc = _run_cmd(["docker", "inspect", "--type=image", image_ref])
+    if stdout is None:
+        if stderr == "__not_found__":
+            return None, "docker_unavailable"
+        if stderr == "__timeout__":
+            return None, "Docker command timed out (20 s)"
+        return None, f"Docker error: {stderr}"
+    if rc != 0:
+        err = (stderr or "").lower()
+        if "no such image" in err or "not found" in err:
+            return None, "image_not_found"
+        if any(p in err for p in ("cannot connect", "is the docker daemon running",
+                                   "connection refused", "permission denied")):
+            return None, "docker_unavailable"
+        return None, (stderr or "docker inspect failed").strip()[:200]
+    try:
+        data = _json.loads(stdout)
+        if not isinstance(data, list) or not data:
+            return None, "Unexpected docker inspect output format"
+        return data, None
+    except Exception:
+        return None, "Failed to parse docker inspect JSON output"
+
+
+def trivy_scan_image(image_ref):
+    """
+    Run ``trivy image`` if Trivy is present on PATH.
+    Returns (data_dict_or_None, status_str).
+    status_str values: 'unavailable', 'ok', or 'error:<detail>'.
+    """
+    if not shutil.which("trivy"):
+        return None, "unavailable"
+    stdout, stderr, rc = _run_cmd(
+        ["trivy", "image", "--format", "json", "--quiet", "--no-progress", image_ref],
+        timeout=120,
+    )
+    if stdout is None:
+        return None, f"error:{stderr}"
+    if rc != 0:
+        return None, f"error:{(stderr or 'trivy scan failed').strip()[:120]}"
+    try:
+        return _json.loads(stdout), "ok"
+    except Exception:
+        return None, "error:Failed to parse Trivy JSON output"
+
+
+_SECRET_KEY_RE = re.compile(
+    r'(password|passwd|secret|token|key|api_key|apikey|auth|credential|private|cert|jwt|pwd)',
+    re.IGNORECASE,
+)
+
+
+def _mask_env_secrets(env_list):
+    """Mask environment variable values whose names suggest secrets."""
+    out = []
+    for entry in (env_list or []):
+        if '=' in entry:
+            k, _, _ = entry.partition('=')
+            out.append(f"{k}=***" if _SECRET_KEY_RE.search(k) else entry)
+        else:
+            out.append(entry)
+    return out
+
+
+def extract_image_metadata(inspect_obj):
+    """Return a clean, display-ready metadata dict from a docker inspect object."""
+    config = inspect_obj.get("Config") or {}
+    root_fs = inspect_obj.get("RootFS") or {}
+    size_bytes = inspect_obj.get("Size")
+    size_str = None
+    if size_bytes is not None:
+        mb = size_bytes / (1024 * 1024)
+        size_str = f"{mb:.1f} MB" if mb < 1024 else f"{mb / 1024:.2f} GB"
+    return {
+        "id": (inspect_obj.get("Id") or "")[:19],
+        "repo_tags": inspect_obj.get("RepoTags") or [],
+        "repo_digests": inspect_obj.get("RepoDigests") or [],
+        "created": inspect_obj.get("Created") or "",
+        "architecture": inspect_obj.get("Architecture") or "",
+        "os": inspect_obj.get("Os") or "",
+        "size": size_str,
+        "layer_count": len(root_fs.get("Layers") or []),
+        "exposed_ports": list((config.get("ExposedPorts") or {}).keys()),
+        "env": _mask_env_secrets(config.get("Env") or []),
+        "entrypoint": config.get("Entrypoint") or [],
+        "cmd": config.get("Cmd") or [],
+        "workdir": config.get("WorkingDir") or "",
+        "user": config.get("User") or "",
+        "labels": config.get("Labels") or {},
+    }
+
+
+def analyze_image_security(image_ref, metadata):
+    """Generate security findings (IMG-prefix IDs) from image metadata."""
+    findings = []
+    user = metadata.get("user", "")
+
+    # IMG001: Running as root
+    if not user or user in ("root", "0", "0:0", "0:root"):
+        findings.append({
+            "id": "IMG001",
+            "source": "image",
+            "severity": "High",
+            "category": "Security",
+            "description": (
+                f"Image runs as root (User='{user or 'not set'}')."
+                " Containers running as root increase the blast radius if compromised."
+                " Add a non-root USER instruction to the Dockerfile."
+            ),
+            "effective_weight": 15,
+        })
+
+    # IMG002: Unpinned :latest tag
+    tags = metadata.get("repo_tags") or []
+    ref_part = image_ref.split("/")[-1]
+    has_latest = any(t.endswith(":latest") for t in tags) or (
+        not tags and (image_ref.endswith(":latest") or ":" not in ref_part)
+    )
+    if has_latest:
+        latest_tags = ", ".join(t for t in tags if t.endswith(":latest")) or image_ref
+        findings.append({
+            "id": "IMG002",
+            "source": "image",
+            "severity": "Medium",
+            "category": "Best Practices",
+            "description": (
+                f"Image uses the ':latest' tag ({latest_tags})."
+                " Unpinned tags produce non-reproducible deployments and can silently update."
+            ),
+            "effective_weight": 8,
+        })
+
+    # IMG003: Many exposed ports
+    ports = metadata.get("exposed_ports") or []
+    if len(ports) > 3:
+        shown = ', '.join(ports[:6]) + ('\u2026' if len(ports) > 6 else '')
+        findings.append({
+            "id": "IMG003",
+            "source": "image",
+            "severity": "Low",
+            "category": "Security",
+            "description": (
+                f"Image exposes {len(ports)} ports ({shown})."
+                " Minimise exposed surface area to reduce the attack vector."
+            ),
+            "effective_weight": 5,
+        })
+
+    # IMG004: No WORKDIR
+    if not metadata.get("workdir"):
+        findings.append({
+            "id": "IMG004",
+            "source": "image",
+            "severity": "Low",
+            "category": "Best Practices",
+            "description": (
+                "Image has no WORKDIR configured. Files default to the root directory (/),"
+                " making filesystem layout unpredictable."
+            ),
+            "effective_weight": 3,
+        })
+
+    # IMG005: Neither ENTRYPOINT nor CMD
+    if not metadata.get("entrypoint") and not metadata.get("cmd"):
+        findings.append({
+            "id": "IMG005",
+            "source": "image",
+            "severity": "Low",
+            "category": "Best Practices",
+            "description": (
+                "Image defines neither ENTRYPOINT nor CMD."
+                " A command must be supplied explicitly at container runtime."
+            ),
+            "effective_weight": 3,
+        })
+
+    return findings
+
+
+def extract_trivy_summary(trivy_data):
+    """Extract a compact vulnerability summary from raw Trivy JSON output."""
+    if not trivy_data or not isinstance(trivy_data, dict):
+        return None
+    results = trivy_data.get("Results") or []
+    counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "UNKNOWN": 0}
+    top_vulns = []
+    for r in results:
+        for v in (r.get("Vulnerabilities") or []):
+            sev = (v.get("Severity") or "UNKNOWN").upper()
+            counts[sev] = counts.get(sev, 0) + 1
+            if len(top_vulns) < 25:
+                top_vulns.append({
+                    "id": v.get("VulnerabilityID", ""),
+                    "pkg": v.get("PkgName", ""),
+                    "installed": v.get("InstalledVersion", ""),
+                    "fixed": v.get("FixedVersion", "") or "",
+                    "severity": sev,
+                    "title": (v.get("Title") or "")[:100],
+                })
+    return {
+        "severity_counts": counts,
+        "total": sum(counts.values()),
+        "vulnerabilities": top_vulns,
+    }
+
+
+@app.route("/inspect-image", methods=["POST"])
+def inspect_image():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "no_body", "message": "No JSON body received"}), 400
+
+    image_ref = validate_image_ref(data.get("image", ""))
+    if not image_ref:
+        return jsonify({
+            "error": "invalid_image_ref",
+            "message": "Invalid or empty image reference. Use format: name:tag  (e.g. nginx:1.27)"
+        }), 400
+
+    inspect_list, inspect_err = docker_inspect_image(image_ref)
+    if inspect_err == "docker_unavailable":
+        return jsonify({
+            "error": "docker_unavailable",
+            "message": "Docker is not installed or the Docker daemon is not running."
+        }), 503
+    if inspect_err == "image_not_found":
+        return jsonify({
+            "error": "image_not_found",
+            "message": f"Image '{image_ref}' was not found locally. Pull it first: docker pull {image_ref}"
+        }), 404
+    if inspect_err:
+        return jsonify({"error": "inspect_failed", "message": inspect_err}), 500
+
+    metadata = extract_image_metadata(inspect_list[0])
+    security_findings = analyze_image_security(image_ref, metadata)
+    trivy_data, trivy_status = trivy_scan_image(image_ref)
+    trivy_summary = extract_trivy_summary(trivy_data) if trivy_status == "ok" else None
+
+    return jsonify({
+        "image_ref": image_ref,
+        "metadata": metadata,
+        "security_findings": security_findings,
+        "trivy_status": trivy_status,
+        "trivy_summary": trivy_summary,
+    })
 
 
 if __name__ == "__main__":

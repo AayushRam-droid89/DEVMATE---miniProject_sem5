@@ -1,5 +1,6 @@
 const API_URL = "http://127.0.0.1:5000/analyze";
 const PDF_URL = "http://127.0.0.1:5000/export-pdf";
+const IMAGE_URL = "http://127.0.0.1:5000/inspect-image";
 const CIRCUMFERENCE = 2 * Math.PI * 52;
 const SEVERITY_RANK = { Critical: 4, High: 3, Medium: 2, Low: 1 };
 
@@ -595,7 +596,8 @@ function renderBadges() {
 const tabBtns = document.querySelectorAll(".tab-btn");
 const tabPanels = {
   analyzer: document.getElementById("tab-analyzer"),
-  academy: document.getElementById("tab-academy"),
+  academy:  document.getElementById("tab-academy"),
+  image:    document.getElementById("tab-image"),
 };
 function switchTab(name) {
   tabBtns.forEach(b => b.classList.toggle("active", b.dataset.tab === name));
@@ -1419,4 +1421,261 @@ if (verifyCertBtn) {
   verifyCertBtn.addEventListener("click", verifyCertificate);
 }
 
+// Allow pressing Enter inside the verify input to trigger verification
+const verifyCertIdInputEl = document.getElementById("verifyCertIdInput");
+if (verifyCertIdInputEl) {
+  // Enter key submits
+  verifyCertIdInputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      verifyCertificate();
+    }
+  });
+  // Typing a new value clears any stale result immediately
+  verifyCertIdInputEl.addEventListener("input", () => {
+    const resultEl = document.getElementById("verifyCertResult");
+    if (resultEl && !resultEl.classList.contains("hidden")) {
+      resultEl.classList.add("hidden");
+      resultEl.innerHTML = "";
+    }
+  });
+}
 
+// ═══════════════════════════════════════════════════════
+//  PHASE 2.5 — DOCKER IMAGE ANALYSIS
+// ═══════════════════════════════════════════════════════
+
+const imgEls = {
+  refInput:       document.getElementById("imageRefInput"),
+  analyzeBtn:     document.getElementById("analyzeImageBtn"),
+  btnText:        document.getElementById("imageBtnText"),
+  btnSpinner:     document.getElementById("imageBtnSpinner"),
+  errorMsg:       document.getElementById("imageErrorMsg"),
+  resultsPanel:   document.getElementById("imageResultsPanel"),
+  skeleton:       document.getElementById("imageLoadingSkeleton"),
+  resultsContent: document.getElementById("imageResultsContent"),
+};
+
+// ── Helpers ────────────────────────────────────────────
+function imgMetaItem(label, value, mono) {
+  const safeVal = escapeHtml(String(value ?? "—"));
+  return `<div class="img-meta-item">
+    <span class="img-meta-label">${label}</span>
+    <span class="img-meta-value${mono ? " font-mono" : ""}">${safeVal}</span>
+  </div>`;
+}
+
+// Convert Trivy ALL-CAPS severity → title-case CSS class name matching existing sev-chip rules.
+function trivySevClass(sev) {
+  const map = { CRITICAL: "Critical", HIGH: "High", MEDIUM: "Medium", LOW: "Low", UNKNOWN: "Low" };
+  return map[(sev || "").toUpperCase()] || "Low";
+}
+
+// ── Render ──────────────────────────────────────────────
+function renderImageResults(data) {
+  const content = imgEls.resultsContent;
+  const meta = data.metadata || {};
+
+  /* 1. Metadata card */
+  const tags    = (meta.repo_tags || []).join("  ·  ") || data.image_ref;
+  const platform = [meta.architecture, meta.os].filter(Boolean).join(" / ") || "—";
+  const ports   = (meta.exposed_ports || []).join(", ") || "(none)";
+  const ep      = (meta.entrypoint || []).join(" ") || "(not set)";
+  const cmd     = (meta.cmd || []).join(" ") || "(not set)";
+  let created = "—";
+  try { if (meta.created) created = new Date(meta.created).toLocaleString(); } catch {}
+
+  let envHtml = "";
+  if ((meta.env || []).length > 0) {
+    envHtml = `<details class="img-env-details">
+      <summary class="img-env-summary">🌿 Environment Variables (${meta.env.length})</summary>
+      <div class="img-env-list">${meta.env.map(e => `<code class="img-env-item">${escapeHtml(e)}</code>`).join("")}</div>
+    </details>`;
+  }
+
+  const metaCard = `
+    <div class="panel-card img-meta-card">
+      <div class="panel-card-header">
+        <span class="panel-icon">🐳</span>
+        <h3 class="img-result-title">${escapeHtml(tags)}</h3>
+      </div>
+      <div class="img-meta-grid">
+        ${imgMetaItem("Image ID", meta.id, true)}
+        ${imgMetaItem("Platform", platform)}
+        ${imgMetaItem("Created", created)}
+        ${imgMetaItem("Size", meta.size)}
+        ${imgMetaItem("Layers", meta.layer_count != null ? String(meta.layer_count) : "—")}
+        ${imgMetaItem("User", meta.user || "(root / not set)")}
+        ${imgMetaItem("Working Dir", meta.workdir || "(not set)")}
+        ${imgMetaItem("Exposed Ports", ports)}
+        ${imgMetaItem("Entrypoint", ep)}
+        ${imgMetaItem("CMD", cmd)}
+      </div>
+      ${envHtml}
+    </div>`;
+
+  /* 2. Security findings — reuse existing finding-card classes */
+  const secs = data.security_findings || [];
+  const secItems = secs.length === 0
+    ? `<p class="empty-state" style="padding:16px 20px;text-align:center;">✅ No security issues detected from image inspection.</p>`
+    : secs.map((f, i) => `
+        <div class="finding-card ${f.severity}" style="animation-delay:${i * 0.05}s">
+          <div class="finding-top">
+            <div class="finding-top-left">
+              <span class="finding-icon">${SEVERITY_ICONS[f.severity] || "📋"}</span>
+              <span class="finding-id">${f.id}</span>
+            </div>
+            <span class="sev-chip ${f.severity}">${f.severity}</span>
+          </div>
+          <div class="finding-desc">${escapeHtml(f.description)}</div>
+          <div class="finding-meta">
+            <span class="finding-category-tag">${f.category}</span>
+          </div>
+        </div>`).join("");
+
+  const secCard = `
+    <div class="panel-card" style="margin-top:16px;">
+      <div class="panel-card-header">
+        <span class="panel-icon">🔒</span>
+        <h3>Security Findings</h3>
+        <span class="findings-count" style="margin-left:auto;">${secs.length} finding${secs.length !== 1 ? "s" : ""}</span>
+      </div>
+      <div class="img-sec-list">${secItems}</div>
+    </div>`;
+
+  /* 3. Trivy section */
+  let trivyCard = "";
+  const ts = data.trivy_status || "";
+
+  if (ts === "unavailable") {
+    trivyCard = `
+      <div class="panel-card" style="margin-top:16px;">
+        <div class="panel-card-header"><span class="panel-icon">🛡️</span><h3>Vulnerability Scan (Trivy)</h3></div>
+        <div class="img-trivy-notice info">
+          ℹ️ <strong>Trivy is not installed</strong> — CVE scanning is unavailable.<br>
+          <span style="font-size:11px;color:var(--text-muted);">Install from <code>aquasecurity.github.io/trivy</code> to enable automated CVE detection.</span>
+        </div>
+      </div>`;
+  } else if (ts.startsWith("error:")) {
+    trivyCard = `
+      <div class="panel-card" style="margin-top:16px;">
+        <div class="panel-card-header"><span class="panel-icon">🛡️</span><h3>Vulnerability Scan (Trivy)</h3></div>
+        <div class="img-trivy-notice warn">⚠️ <strong>Trivy scan failed:</strong> ${escapeHtml(ts.replace(/^error:/, ""))}</div>
+      </div>`;
+  } else if (ts === "ok" && data.trivy_summary) {
+    const sum   = data.trivy_summary;
+    const sc    = sum.severity_counts || {};
+    const vulns = sum.vulnerabilities || [];
+
+    const countPills = ["CRITICAL","HIGH","MEDIUM","LOW","UNKNOWN"].map(s => `
+      <div class="trivy-count-pill ${s.toLowerCase()}">
+        <span class="trivy-pill-num">${sc[s] || 0}</span>
+        <span class="trivy-pill-label">${s}</span>
+      </div>`).join("");
+
+    let vulnBody = "";
+    if (sum.total === 0) {
+      vulnBody = `<p class="empty-state" style="padding:16px 20px;text-align:center;">✅ No vulnerabilities found by Trivy.</p>`;
+    } else if (vulns.length > 0) {
+      const rows = vulns.map(v => {
+        const cls    = trivySevClass(v.severity);
+        const fixStr = v.fixed ? ` → <strong>${escapeHtml(v.fixed)}</strong>` : "";
+        const ttl    = v.title ? `<span class="trivy-vuln-title">${escapeHtml(v.title)}</span>` : "";
+        return `<div class="trivy-vuln-row">
+            <span class="sev-chip ${cls}">${v.severity}</span>
+            <span class="trivy-vuln-id font-mono">${escapeHtml(v.id)}</span>
+            <span class="trivy-vuln-pkg">${escapeHtml(v.pkg)}</span>
+            <span class="trivy-vuln-ver">${escapeHtml(v.installed)}${fixStr}</span>
+            ${ttl}
+          </div>`;
+      }).join("");
+      const more = sum.total > vulns.length
+        ? `<p class="hint" style="padding:6px 14px 10px;">Showing top ${vulns.length} of ${sum.total} CVEs.</p>`
+        : "";
+      vulnBody = `<div class="trivy-vuln-list">${rows}${more}</div>`;
+    }
+
+    trivyCard = `
+      <div class="panel-card" style="margin-top:16px;">
+        <div class="panel-card-header">
+          <span class="panel-icon">🛡️</span>
+          <h3>Vulnerability Scan (Trivy)</h3>
+          <span class="findings-count" style="margin-left:auto;">${sum.total} CVE${sum.total !== 1 ? "s" : ""}</span>
+        </div>
+        <div class="trivy-count-row">${countPills}</div>
+        ${vulnBody}
+      </div>`;
+  }
+
+  content.innerHTML = metaCard + secCard + trivyCard;
+}
+
+// ── Fetch ───────────────────────────────────────────────
+async function runImageAnalysis() {
+  const ref = (imgEls.refInput?.value || "").trim();
+  if (imgEls.errorMsg) imgEls.errorMsg.innerHTML = "";
+
+  if (!ref) {
+    if (imgEls.errorMsg) imgEls.errorMsg.textContent = "Please enter an image name, e.g. nginx:1.27";
+    return;
+  }
+
+  imgEls.analyzeBtn.disabled = true;
+  if (imgEls.btnText)    imgEls.btnText.textContent = "Analyzing…";
+  if (imgEls.btnSpinner) imgEls.btnSpinner.classList.remove("hidden");
+  imgEls.resultsPanel.classList.remove("hidden");
+  imgEls.resultsPanel.classList.add("visible");
+  imgEls.skeleton.classList.remove("hidden");
+  imgEls.resultsContent.classList.add("hidden");
+  imgEls.resultsContent.classList.remove("visible");
+
+  try {
+    const res  = await fetch(IMAGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image: ref }),
+    });
+    const json = await res.json();
+    imgEls.skeleton.classList.add("hidden");
+
+    if (!res.ok) {
+      const err = json.error || "error";
+      const msg = json.message || `Request failed (${res.status})`;
+      const pfx = err === "docker_unavailable" ? "🐳" :
+                  err === "image_not_found"     ? "📦" :
+                  err === "invalid_image_ref"   ? "⚠️" : "❌";
+      const lbl = err === "docker_unavailable" ? "Docker unavailable" :
+                  err === "image_not_found"     ? "Image not found locally" :
+                  err === "invalid_image_ref"   ? "Invalid image reference" : "Error";
+      imgEls.errorMsg.innerHTML = `${pfx} <strong>${lbl}:</strong> ${escapeHtml(msg)}`;
+      imgEls.resultsPanel.classList.add("hidden");
+      imgEls.resultsPanel.classList.remove("visible");
+      return;
+    }
+
+    renderImageResults(json);
+    imgEls.resultsContent.classList.remove("hidden");
+    imgEls.resultsContent.classList.add("visible");
+    imgEls.resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (err) {
+    imgEls.skeleton.classList.add("hidden");
+    if (imgEls.errorMsg) imgEls.errorMsg.textContent = "Unable to connect to the analysis server. Is the backend running?";
+    imgEls.resultsPanel.classList.add("hidden");
+    imgEls.resultsPanel.classList.remove("visible");
+  } finally {
+    imgEls.analyzeBtn.disabled = false;
+    if (imgEls.btnText)    imgEls.btnText.textContent = "Analyze Image";
+    if (imgEls.btnSpinner) imgEls.btnSpinner.classList.add("hidden");
+  }
+}
+
+// ── Event wiring ───────────────────────────────────────
+const analyzeImageBtn = document.getElementById("analyzeImageBtn");
+if (analyzeImageBtn) analyzeImageBtn.addEventListener("click", runImageAnalysis);
+
+const imageRefInput = document.getElementById("imageRefInput");
+if (imageRefInput) {
+  imageRefInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); runImageAnalysis(); }
+  });
+}

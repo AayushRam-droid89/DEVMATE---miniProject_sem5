@@ -287,10 +287,26 @@ An Academy completion certificate awarded to users who successfully master all 1
 - **Editable Name**: The recipient name is marked as `contenteditable="true"`, allowing users to directly click and edit their name before saving.
 - **Preservation & PDF**: A **"Print / Save PDF"** button fires the browser's native `window.print()` functionality. The styling overrides (`@media print`) format the layout, hide background controls, and present a clean print document.
 - **Verification Widget**: An entry point at the bottom of the certificate panel allows verifying certificate IDs generated during the session.
-  - *No Certificate Unlocked State*: Explains that no active certificate has been unlocked in the current session yet and prompts the user to master all 12 lessons.
-  - *Valid Verification State*: Displays `✅ Certificate Verified!`, current recipient name (dynamically synchronized with `contenteditable` edits), Certificate ID, completion date, verification hash code (`VERIFY-XXXXXX`), and 12/12 mastery status.
-  - *Invalid / Expired Verification State*: Displays `❌ Verification Failed / Invalid ID`, entered ID, and explains that the ID is invalid or originated from a previous session.
-  - *Clear Button*: Provides a `Clear / Try Another ID` button to reset verification queries.
+
+### Certificate Verification — Exact Behavior
+
+The verification widget compares the entered Certificate ID against `academyCertificate.id` in session memory using a **strict exact-match** (after `trim()`). No substring, prefix, or case-insensitive matching is used.
+
+| Scenario | Result shown | CSS class |
+|---|---|---|
+| **Empty input** | ⚠️ validation message prompting the user to enter an ID | `.verify-result.warning` |
+| **Valid ID** (matches current session cert exactly) | ✅ `Certificate Verified!` with recipient name, cert ID, verification code, completion date, and 12/12 mastery status | `.verify-result.success` |
+| **Invalid or expired ID** (cert is unlocked but entered ID doesn't match) | ❌ `Verification Failed / Invalid ID` with the entered ID quoted and a session-limitation notice | `.verify-result.error` |
+| **No certificate in session** (cert not yet unlocked or page was refreshed) | 🔒 `No Active Certificate in Session` explaining that all 12 lessons must be mastered, plus a session-only system notice | `.verify-result.warning` |
+
+#### Session Expiry Behavior
+Certificate IDs are strictly session-scoped — they live only in JavaScript memory (`let academyCertificate`). Refreshing the page or closing the tab destroys the ID. Because no persistent registry exists, an ID from a previous browser session cannot be verified after refresh and will always produce the `No Active Certificate in Session` or `Verification Failed` result, with the limitation explicitly communicated to the user.
+
+#### UX Details
+- **Enter key**: Pressing `Enter` inside the verify input triggers verification immediately — no need to click the Verify button.
+- **Auto-clear on retype**: When the user starts typing a new ID, any previously displayed verification result is automatically hidden, preventing stale success/failure messages from being visible while a new query is in progress.
+- **Clear button**: Each result state exposes a `Clear / Try Another ID` button that resets both the input and the result panel.
+- **Recipient name sync**: When a certificate is verified as valid, the displayed recipient name is read from the live `contenteditable` element (if the certificate page is currently open) or falls back to `academyCertificate.recipientName` — always reflecting the current session name without requiring persistent storage.
 
 ### Session-Only Limitation
 Certificates and Certificate IDs (`DM-CERT-XXXX-XXXX`) are held strictly in volatile browser session memory. A page reload or browser restart clears the active certificate and resets progress. Because DevMate operates without a database or authentication backend (until Phase 3), certificates cannot be verified across sessions or via a public server API. Explicit notice of this limitation is displayed in the verification UI.
@@ -299,15 +315,53 @@ Certificates and Certificate IDs (`DM-CERT-XXXX-XXXX`) are held strictly in vola
 - **`index.html`**:
   - Added `#certificatePanel` containing the progress tracker, congratulations slot, view button, and verification widget.
   - Added `#certificateView` containing the `#certificatePaper` container and print buttons.
-- **`style.css`**: Added `.certificate-panel` layout, `.verify-input`, `.verify-btn`, `.verify-result`, `.certificate-paper` double-border gold design, `.cert-recipient` custom focus dashed line, `.cert-meta-row` layout, and `@media print` stylesheet rules.
+- **`style.css`**: Added `.certificate-panel` layout, `.verify-input`, `.verify-btn`, `.verify-result` (with `.success`, `.error`, `.warning` variants), `.verify-success-box`, `.verify-error-box`, `.verify-warning-box`, `.verify-session-notice`, `.verify-clear-btn`, `.font-mono`, `.certificate-paper` double-border gold design, `.cert-recipient` custom focus dashed line, `.cert-meta-row` layout, and `@media print` stylesheet rules.
 - **`script.js`**:
-  - `academyCertificate` state tracking generated Cert ID and lock toast status.
+  - `academyCertificate` state tracking generated Cert ID, recipient name, issue date, and lock toast status.
   - `generateVerificationHash(certId)` helper generating verification strings.
   - `checkCertificateStatus()` updating progress tracks, generating IDs, and wiring "View Certificate" actions.
   - `openCertificate()` isolating the certificate paper by hiding normal layout panels.
   - `closeCertificate()` restoring the Academy tab.
-  - `verifyCertificate()` evaluating entered IDs against session memory.
+  - `verifyCertificate()` — strict exact-match (`===`) against session cert ID after `trim()`; covers all four states (empty, valid, invalid/expired, no-session cert).
+  - `clearCertVerification()` — resets input value, hides and clears result element; exposed as `window.clearCertVerification` for inline `onclick` calls.
+  - Enter-key listener on `#verifyCertIdInput` triggers `verifyCertificate()`.
+  - Input event listener on `#verifyCertIdInput` auto-clears the result panel when the user types a new ID.
   - Event listeners for print, back, and verify buttons.
+
+---
+
+## 📦 Phase 2.5 — Docker Image Analysis
+
+An image analysis mode added to DevMate allowing users to inspect locally available Docker images for configuration metadata, security risks, and optional CVE vulnerabilities via Trivy.
+
+### Purpose
+Allows developers and DevOps engineers to analyze built container images locally before pushing to registries or deploying to clusters.
+
+### How to Use
+1. Open the **📦 Image** tab in the main navigation.
+2. Enter a local Docker image name and tag (e.g. `nginx:1.27`, `python:3.12-slim`, `myapp:latest`).
+3. Click **Analyze Image** or press `Enter`.
+4. Review the extracted metadata, security findings, and (if installed) Trivy vulnerability scan results.
+
+### Requirements & Behavior
+- **Docker Requirement**: Uses safe local CLI execution (`docker inspect --type=image <ref>`). Docker must be installed and the daemon must be running.
+- **Image Availability**: The target image must exist locally in Docker's image store. If absent, DevMate displays a clear error instructing the user to run `docker pull <name>`.
+- **Optional Trivy Integration**: If `trivy` is found on PATH, DevMate automatically runs a JSON vulnerability scan and displays CVE counts broken down by severity (Critical, High, Medium, Low, Unknown) along with a detailed vulnerability list. If Trivy is not installed, the feature continues to work via Docker inspection and displays an informational notice explaining that Trivy CVE scanning is unavailable.
+- **Safety & Error Handling**:
+  - Image inputs are strictly validated against a safe regex pattern (`[a-zA-Z0-9_.\-/:@]`) before execution to prevent command injection.
+  - Commands execute with timeouts via `subprocess.run`.
+  - Backend returns structured JSON error responses with status codes (`503` for Docker unavailable, `404` for image missing, `400` for invalid ref, `500` for inspect failures).
+  - Flask backend never crashes on Docker or Trivy execution failures.
+
+### Displayed Information
+- **Metadata Card**: Image ID, Platform (Architecture/OS), Created Date, Size, Layer Count, User, Working Directory, Exposed Ports, Entrypoint, CMD, and expandable Environment Variables (with sensitive key values like passwords/tokens automatically masked as `***`).
+- **Security Findings**: Image-level configuration risks tagged with `IMG` IDs using existing severity chips (`High`, `Medium`, `Low`):
+  - `IMG001` (High): Running as root user (`User` not set or `root`).
+  - `IMG002` (Medium): Unpinned `:latest` tag.
+  - `IMG003` (Low): Excessive exposed ports (>3 ports).
+  - `IMG004` (Low): Missing `WORKDIR` configuration.
+  - `IMG005` (Low): Missing both `ENTRYPOINT` and `CMD`.
+- **Trivy Vulnerabilities**: Severity count pills (Critical, High, Medium, Low, Unknown), package name, installed version, fixed version, CVE ID link, and vulnerability title.
 
 ---
 
@@ -523,6 +577,34 @@ The current XP total is shown as a pill badge — **⭐ XP: 0** — inside the A
   4. **Academy Certificate unlock** — in `checkCertificateStatus()` when `!academyCertificate.unlockedToastShown`.
   5. **Flashcard session completion** — in `showCompletion()` after `awardXP` and `checkBadges`.
 - Confetti is purely visual — no XP is awarded, no mastery state is changed, no badge or certificate state is modified, no existing toast behavior is altered.
+
+### Phase 2.5 — Certificate Verification Loop (Change 9)
+- Completed the certificate verification feature as a full user-facing loop:
+  - **Enter key support**: Pressing `Enter` in `#verifyCertIdInput` now triggers `verifyCertificate()` directly — no click required.
+  - **Auto-clear on retype**: An `input` event listener on `#verifyCertIdInput` hides and empties `#verifyCertResult` the instant the user types a new character, so stale results never remain visible while a new ID is being entered.
+  - **Strict exact-match verification**: The entered ID is compared against `academyCertificate.id` using `===` after `trim()` — no substring, prefix, or loose matching is possible.
+  - **Four complete states**: empty-input (warning), valid (success with name/ID/hash/date/status), invalid-or-expired (error with session notice), no-session-cert (warning with progress CTA).
+  - **Session-expiry communication**: Post-refresh verification attempts correctly land in the `No Active Certificate in Session` state (or `Verification Failed` if a cert was unlocked but a different ID was entered), with the session-only limitation explicitly explained in the UI.
+  - **Recipient name consistency**: `verifyCertificate()` reads the live `contenteditable` element if the cert view is open, falls back to `academyCertificate.recipientName` otherwise — no persistent storage introduced.
+  - **`.font-mono` CSS**: Added missing utility class to `style.css` so Certificate ID and verification hash `<code>` elements in the result panel render in monospace correctly.
+- No new HTML elements added; no existing element IDs, classes, or structure modified.
+
+### Phase 2.5 — Docker Image Analysis (Change 10)
+- Added Docker Image Analysis mode to DevMate:
+  - **Backend (`app.py`)**:
+    - Added `/inspect-image` POST endpoint.
+    - Input sanitization via `validate_image_ref()` regex validation.
+    - Safe `docker inspect` execution returning image ID, repo tags, platform, size, layers, user, workdir, ports, entrypoint, cmd, and secret-masked environment variables.
+    - Rule-based security analysis (`IMG001`–`IMG005`) for root user, latest tag, exposed ports, workdir, and entrypoint/cmd.
+    - Optional Trivy integration: auto-detects `trivy` binary on PATH, parses JSON CVE results, and returns severity counts + vulnerability list.
+    - Graceful error responses (503 Docker unavailable, 404 image missing, 400 invalid ref) ensuring the Flask server never crashes.
+  - **Frontend (`index.html`, `script.js`, `style.css`)**:
+    - Added 📦 Image tab to topbar navigation bar and `tabPanels` state object.
+    - Input row with image reference input, Analyze Image button, loading spinner, and error display.
+    - Skeleton loader during analysis fetch.
+    - Metadata card grid, environment variables accordion, security findings list, and Trivy CVE summary section.
+    - Enter key support for input submission.
+    - Styling aligned with existing visual language and glassmorphic aesthetic.
 
 ### Initial Release (Phase 2)
 - Dockerfile analyzer with 5 rules (`DF001`–`DF005`).

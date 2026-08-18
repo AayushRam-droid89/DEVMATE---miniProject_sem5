@@ -1,0 +1,472 @@
+==================================================
+DEVOPS SPECIAL — USER TESTING MANUAL
+==================================================
+
+This document is a comprehensive, step-by-step practical testing manual for DevMate (DevOps Special). Use this manual to verify every feature, workflow, visual indicator, and edge case of the application directly in your web browser.
+
+--------------------------------------------------
+1. BEFORE YOU START
+--------------------------------------------------
+
+Requirements:
+- Python 3.8+ installed
+- Web browser (Chrome, Firefox, Edge, or Safari)
+- Optional: Docker Desktop (running) for Docker Image Analysis
+- Optional: Trivy CLI installed for Trivy CVE Scanning
+
+How to Start the Application:
+1. Open a terminal / PowerShell window in the project folder:
+   d:\projects\miniProject_sem5_old\devops-special
+2. Start the Flask server:
+   python app.py
+   (or: py app.py)
+3. Confirm the terminal displays:
+   🧠 DevMate Backend running on http://127.0.0.1:5000
+4. Open your browser and navigate to:
+   http://127.0.0.1:5000
+
+Confirm Application Loaded Correctly:
+- ACTION: Observe the topbar navigation bar.
+- EXPECTED RESULT: You should see the DevMate logo ("🧠 DevMate"), three topbar tabs ("🔍 Analyzer", "🎓 Academy", "📦 Image"), and the "Beginner Mode" toggle switch (checked by default).
+
+--------------------------------------------------
+2. BASIC ANALYZER TEST
+--------------------------------------------------
+
+Test Dockerfile Analysis:
+- ACTION: Click the "🔍 Analyzer" tab. In the "Dockerfile" input area, paste the following sample Dockerfile:
+
+FROM python:latest
+COPY . /app
+WORKDIR /app
+CMD ["python", "app.py"]
+
+- ACTION: Click the "🔍 Analyze Deployment Readiness" button.
+- EXPECTED RESULT: 
+  - The results panel smoothly scrolls into view.
+  - The readiness score ring displays a calculated score (e.g. 50/100) with status "Not Ready" or "Significant Gaps".
+  - The Category Breakdown shows score penalties under "Security" and "Best Practices".
+  - Finding cards appear:
+    - [High] DF001: Base image 'python:latest' uses an unpinned tag.
+    - [Critical] DF002: No USER directive found — container runs as root by default.
+    - [Medium] DF003: No HEALTHCHECK instruction.
+    - [Medium] DF004: COPY doesn't use --chown.
+    - [Low] DF005: No EXPOSE instruction.
+
+Test Kubernetes Analysis:
+- ACTION: In the "Kubernetes Manifest" input area, paste the following sample manifest:
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+      - name: web
+        image: nginx:latest
+
+- ACTION: Click "🔍 Analyze Deployment Readiness".
+- EXPECTED RESULT:
+  - Findings list updates to include Kubernetes findings:
+    - [Critical/High] K8S001: Container has no resource limits/requests.
+    - [High] K8S002: No readinessProbe defined.
+    - [High] K8S003: No livenessProbe defined.
+    - [Medium] K8S004: No securityContext defined.
+    - [Medium] K8S005: Image uses ':latest' tag.
+  - Score updates to reflect combined Dockerfile + K8s penalties.
+  - Roadmap section appears listing recommended fixes in order of weight impact.
+
+--------------------------------------------------
+3. ACADEMY — BASIC NAVIGATION
+--------------------------------------------------
+
+- ACTION: Click the "🎓 Academy" tab in the topbar.
+- EXPECTED RESULT:
+  - The Academy header displays "DevMate Academy", XP indicator ("0 XP"), progress tracker ("0 / 12 Mastered"), and the "🃰 Flashcards" button.
+  - The Filter & Search bar displays category pills, difficulty dropdown, search input, and filter tabs (All / Dockerfile / Kubernetes / Mastered).
+  - A grid of 12 lesson cards renders below.
+
+Verify Lesson Counts & Filters:
+- ACTION: Click the "Dockerfile" tab filter.
+- EXPECTED RESULT: Exactly 5 Dockerfile lesson cards are displayed.
+- ACTION: Click the "Kubernetes" tab filter.
+- EXPECTED RESULT: Exactly 7 Kubernetes lesson cards are displayed.
+- ACTION: Click the "All" tab filter.
+- EXPECTED RESULT: All 12 lesson cards are displayed.
+- ACTION: Select "Beginner" from the Difficulty dropdown.
+- EXPECTED RESULT: Only beginner-level lessons (e.g. DF001, DF002, K8S001, K8S005) are displayed. Reset difficulty to "All Difficulties".
+
+--------------------------------------------------
+4. LESSON VIEW
+--------------------------------------------------
+
+- ACTION: From the Academy tab, click any lesson card (e.g. "DF002: Avoid Running Containers as Root").
+- EXPECTED RESULT:
+  - The lesson view slides open displaying the lesson title, category chip, severity tag, and difficulty tag.
+  - Sections rendered:
+    1. Plain Explanation (simple analogy)
+    2. Technical Explanation (in-depth DevOps context)
+    3. Why It Matters (risk & blast radius)
+    4. Recommended Best Practice
+    5. Bad vs. Good Code Comparison
+    6. Interactive Quiz section
+- ACTION: Scroll down to the Bad vs. Good code blocks. Hover over the code boxes.
+- EXPECTED RESULT: "📋 Copy Fix" and "📋 Copy Code" buttons appear on hover.
+- ACTION: Click "Back to Academy".
+- EXPECTED RESULT: Returns smoothly to the 12-lesson grid view.
+
+Analyzer → Academy Bridge ("Take Lesson"):
+- ACTION: Go to "🔍 Analyzer", paste `FROM python:latest`, and click "Analyze Deployment Readiness".
+- ACTION: Expand finding DF001 card, scroll to the bottom of the card, and click "🎓 Take Academy Lesson (DF001)".
+- EXPECTED RESULT: Immediately opens the DF001 lesson detail view in the Academy tab.
+
+--------------------------------------------------
+5. QUIZ + MASTERY
+--------------------------------------------------
+
+- ACTION: Open lesson "DF002" in Academy. Scroll to the "Knowledge Check" quiz.
+- ACTION: Select an INCORRECT option and click "Submit Answer".
+- EXPECTED RESULT:
+  - Red error alert appears: "❌ Incorrect. Try again!"
+  - Quiz options remain interactive for retry. No XP or mastery awarded.
+- ACTION: Select the CORRECT option ("If compromised, attacker has full root access") and click "Submit Answer".
+- EXPECTED RESULT:
+  - Green success alert appears: "🎉 Correct! You've mastered this rule! (+10 XP)".
+  - A visual celebration confetti particle burst fires across the screen.
+  - Floating toast notification appears: "+10 XP Earned!".
+  - XP counter in the header updates from 0 XP to 10 XP.
+  - Mastered tracker updates to "1 / 12 Mastered".
+  - The lesson card in the grid now shows a green "Mastered" badge.
+- ACTION: Re-open lesson "DF002", select the correct answer again, and click "Submit Answer".
+- EXPECTED RESULT: Answer is confirmed, but no additional XP or duplicate confetti is awarded.
+
+Analyzer Inline Quiz Sync:
+- ACTION: Go to "🔍 Analyzer", expand finding DF002 card.
+- EXPECTED RESULT: The inline quiz inside the Analyzer card shows that the quiz is already passed / mastered.
+
+--------------------------------------------------
+6. COPY-FIX
+--------------------------------------------------
+
+- ACTION: Open the Analyzer tab or any Academy lesson detail view.
+- ACTION: Find a finding card or code block with "📋 Copy Fix" or "📋 Copy Code".
+- ACTION: Click "📋 Copy Fix".
+- EXPECTED RESULT:
+  - A dark glassmorphic toast notification slides in from the top-right:
+    "📋 Fix copied to clipboard."
+  - System clipboard receives the exact recommended fix text.
+- ACTION: Click "📋 Copy Code".
+- EXPECTED RESULT:
+  - Toast notification appears: "📋 Example code copied to clipboard."
+  - System clipboard receives the snippet text.
+  (Note: Requires localhost or HTTPS context for native clipboard API; falls back gracefully to execCommand if non-secure).
+
+--------------------------------------------------
+7. ACADEMY SEARCH + FILTER COMBINATIONS
+--------------------------------------------------
+
+Test Case 1: Search Only
+- ACTION: In Academy search input `🔎 Search lessons...`, type `healthcheck`.
+- EXPECTED RESULT: Grid filters to show only DF003 ("Add HEALTHCHECK Instruction").
+
+Test Case 2: Filter Only
+- ACTION: Clear search box. Click "Kubernetes" tab filter. Select "Security" from Category dropdown.
+- EXPECTED RESULT: Shows only Kubernetes Security lessons (e.g. K8S004).
+
+Test Case 3: Search + Dockerfile
+- ACTION: Click "Dockerfile" tab filter. Type `copy` into search box.
+- EXPECTED RESULT: Shows only DF004 ("Use COPY --chown").
+
+Test Case 4: Search + Mastered
+- ACTION: Click "Mastered" tab filter. Type `root`.
+- EXPECTED RESULT: Shows DF002 if mastered; empty state if DF002 is not mastered.
+
+Test Case 5: Search with No Results
+- ACTION: Click "All" tab filter. Type `xyzxyz123` into search box.
+- EXPECTED RESULT:
+  - Lesson grid clears.
+  - Empty state message appears: "No lessons match your current search and filter criteria."
+
+--------------------------------------------------
+8. XP SYSTEM
+--------------------------------------------------
+
+Manual Triggering:
+- Lesson Quiz Mastery: Pass any unmastered lesson quiz (+10 XP).
+- Flashcards Session Completion: Complete an entire flashcard deck study session (+10 XP).
+
+Duplicate Protection Verification:
+- ACTION: Restart a flashcards deck and complete it a second time within the same session.
+- EXPECTED RESULT: Completion screen congratulates you, but XP total does NOT increase beyond the first session award (protects against infinite XP farming).
+
+--------------------------------------------------
+9. BADGES
+--------------------------------------------------
+
+1. Docker Master
+- Requirement: Master all 5 Dockerfile lessons (DF001–DF005).
+- TEST: Complete quizzes for DF001, DF002, DF003, DF004, and DF005.
+- EXPECTED UI: Badge "Docker Master" unlocks with a toast notification and confetti burst.
+
+2. K8s Architect
+- Requirement: Master all 7 Kubernetes lessons (K8S001–K8S005, K8S900, K8S902).
+- TEST: Complete quizzes for all 7 K8s lessons.
+- EXPECTED UI: Badge "K8s Architect" unlocks with toast and confetti.
+
+3. DevOps Grandmaster
+- Requirement: Master all 12 Academy lessons.
+- TEST: Complete all 12 lesson quizzes.
+- EXPECTED UI: Badge "DevOps Grandmaster" unlocks.
+
+4. XP Collector
+- Requirement: Accumulate 100 XP.
+- TEST: Complete quizzes and flashcard sessions until XP counter reaches 100.
+- EXPECTED UI: Badge "XP Collector" unlocks in the Badges panel.
+
+--------------------------------------------------
+10. FLASHCARDS
+--------------------------------------------------
+
+- ACTION: In the Academy tab header, click "🃰 Flashcards".
+- EXPECTED RESULT: Flashcards interface opens. Category selector defaults to "All Categories (12 cards)".
+- ACTION: Click "🔀 Start Study Session (Shuffled)".
+- EXPECTED RESULT:
+  - Flashcard deck loads showing Card 1 of 12.
+  - Card shows the front face with a DevOps question and category tag.
+- ACTION: Click anywhere on the card or click "🔄 Flip Card".
+- EXPECTED RESULT: 3D flip animation reveals the back of the card with the answer and explanation.
+- ACTION: Click "Next ➔" to navigate through all 12 cards.
+- EXPECTED RESULT: Progress tracker advances (Card 2 of 12, Card 3 of 12...).
+- ACTION: On Card 12, click "Next ➔".
+- EXPECTED RESULT:
+  - Completion view appears displaying "🎉 Study Session Complete!", total cards reviewed, +10 XP award notification, and a confetti particle burst.
+  - Buttons available: "🔀 Study Again (Reshuffle)", "🎓 Back to Academy".
+
+View Stacking Fix Verification:
+- ACTION: From the Flashcards completion view, click "🎓 Back to Academy". Open a lesson.
+- EXPECTED RESULT: Lesson view opens cleanly; Flashcards view is completely hidden (no overlapping elements).
+
+--------------------------------------------------
+11. CERTIFICATE
+--------------------------------------------------
+
+Locked State:
+- ACTION: Open Academy tab when < 12 lessons are mastered. Scroll to the Certificate Card at the bottom.
+- EXPECTED RESULT: Displays "0 / 12 lessons mastered" and locked notice "🔒 Master all 12 lessons to unlock your certificate."
+
+Unlocked State:
+- ACTION: Master all 12 lesson quizzes.
+- EXPECTED RESULT:
+  - Certificate card updates to "🏆 Congratulations! You completed the DevMate Academy."
+  - "🎓 View Certificate" button becomes active.
+  - Unlocking triggers a confetti celebration burst.
+
+View Certificate:
+- ACTION: Click "🎓 View Certificate".
+- EXPECTED RESULT:
+  - Formal certificate document displays with double gold border, DevMate branding, completion statement, completion date, Certificate ID (e.g. `DM-CERT-A1B2-C3D4`), and verification code.
+  - Recipient Name field is editable (`contenteditable="true"`).
+
+Print / Save PDF:
+- ACTION: Click "🖨️ Print / Save PDF".
+- EXPECTED RESULT: Browser native print dialog opens. Styling (@media print) formats certificate to full-page print layout and hides background controls.
+
+--------------------------------------------------
+12. CERTIFICATE VERIFICATION
+--------------------------------------------------
+
+Location: Bottom of Certificate panel in Academy tab (`#verifyCertPanel`).
+
+Test Case 1: Empty Input
+- ACTION: Leave verify input blank and click "Verify".
+- EXPECTED RESULT: Warning box appears: "⚠️ Please enter a Certificate ID to verify." (`.verify-result.warning`).
+
+Test Case 2: Valid Current-Session ID
+- ACTION: Unlock certificate, copy the generated ID (e.g. `DM-CERT-A1B2-C3D4`), paste it into the input, and click "Verify" or press `Enter`.
+- EXPECTED RESULT: Success box appears: "✅ Certificate Verified!" showing Recipient Name, Cert ID, Verification Code, Issue Date, and 12/12 Mastery Status (`.verify-result.success`).
+
+Test Case 3: Invalid / Partial ID
+- ACTION: Enter an invalid ID (e.g. `DM-CERT-INVALID-999` or partial `DM-CERT`) and click "Verify".
+- EXPECTED RESULT: Error box appears: "❌ Verification Failed / Invalid ID" stating the ID does not match active session records (`.verify-result.error`).
+
+Test Case 4: Retype Auto-Clear
+- ACTION: With a verification result displayed, type a new character in the input box.
+- EXPECTED RESULT: The result box immediately hides and clears, preventing stale verification feedback.
+
+Test Case 5: Session Expiry (Post-Refresh)
+- ACTION: Refresh the browser (`F5`). Enter any previously generated Certificate ID.
+- EXPECTED RESULT: Warning box appears: "🔒 No Active Certificate in Session" explaining that session memory was reset on page reload.
+
+--------------------------------------------------
+13. CONFETTI / CELEBRATION
+--------------------------------------------------
+
+Manual Trigger Tests:
+1. First-time Lesson Mastery: Pass an unmastered quiz ➔ 32-particle falling confetti burst.
+2. Badge Unlock: Master 5th Dockerfile lesson ➔ Badge unlock toast + confetti burst.
+3. Certificate Unlock: Master 12th lesson ➔ Certificate unlock + confetti burst.
+4. Flashcards Completion: Reach last flashcard ➔ Completion screen + confetti burst.
+
+Cooldown Guard:
+- If two achievements fire simultaneously (e.g., 12th lesson master unlocks badge + certificate), the 1500ms cooldown guard ensures a single clean burst occurs without duplicate lag.
+
+--------------------------------------------------
+14. DOCKER IMAGE ANALYSIS
+--------------------------------------------------
+[Requirement: Docker Desktop installed and daemon running]
+
+- ACTION: Click the "📦 Image" tab in the topbar navigation.
+- EXPECTED RESULT: Image inspection view displays input row, placeholder `e.g. nginx:1.27`, and "Analyze Image" button.
+
+Test Case 1: Inspect Local Image
+- ACTION: Enter a locally pulled image name (e.g. `nginx:1.27` or `python:3.12-slim`) and click "Analyze Image" or press `Enter`.
+- EXPECTED RESULT:
+  - Skeleton loader animates during fetch.
+  - Results display Metadata Card: Image ID, Platform (Architecture/OS), Created Date, Size, Layer Count, User, Working Directory, Exposed Ports, Entrypoint, CMD, and expandable Environment Variables accordion.
+  - Security Findings list displays image-level risk cards:
+    - `IMG001` (High) if running as root
+    - `IMG002` (Medium) if using `:latest` tag
+    - `IMG003` (Low) if >3 exposed ports
+    - `IMG004` (Low) if missing `WORKDIR`
+    - `IMG005` (Low) if missing `ENTRYPOINT`/`CMD`
+
+Test Case 2: Image Not Found Locally
+- ACTION: Enter `nonexistent-image-xyz:99.99` and click "Analyze Image".
+- EXPECTED RESULT: Error banner appears: "📦 Image not found locally: Image 'nonexistent-image-xyz:99.99' was not found locally. Pull it first: docker pull nonexistent-image-xyz:99.99".
+
+Test Case 3: Docker Daemon Not Running / Unavailable
+- ACTION: Stop Docker Desktop (or run command when Docker is stopped) and analyze any image.
+- EXPECTED RESULT: Error banner appears: "🐳 Docker unavailable: Docker is not installed or the Docker daemon is not running." (Backend returns HTTP 503 without crashing).
+
+--------------------------------------------------
+15. TRIVY VULNERABILITY SCANNING
+--------------------------------------------------
+
+Test Case 1: Trivy Available
+[Requirement: `trivy` installed and available on PATH]
+- ACTION: Analyze a local image (e.g. `python:3.12-slim`) in the "📦 Image" tab.
+- EXPECTED RESULT:
+  - Below Security Findings, a "Vulnerability Scan (Trivy)" panel appears.
+  - Displays count pills for CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN.
+  - Displays CVE rows showing severity chip, CVE ID, Package Name, Installed Version, Fix Version, and Title.
+
+Test Case 2: Trivy Unavailable
+[Requirement: `trivy` NOT installed on PATH]
+- ACTION: Analyze a local image when `trivy` is uninstalled.
+- EXPECTED RESULT:
+  - Image inspection succeeds completely via Docker inspect.
+  - The Trivy panel displays an informational notice: "ℹ️ Trivy is not installed — CVE scanning is unavailable. Install from aquasecurity.github.io/trivy to enable automated CVE detection."
+  - (Distinguishes clearly between "Trivy unavailable" and "0 vulnerabilities found").
+
+--------------------------------------------------
+16. VIEW NAVIGATION REGRESSION TESTS
+--------------------------------------------------
+
+Verify View-Stacking Bug Fixes:
+1. Academy ➔ Lesson ➔ Back: Click lesson ➔ details open ➔ click Back ➔ grid restores.
+2. Analyzer ➔ Take Lesson: Click "Take Academy Lesson" in Analyzer finding ➔ Academy tab opens directly to lesson view.
+3. Flashcards ➔ Lesson: Open Flashcards ➔ return to Academy ➔ open a lesson. Confirm Flashcards view is completely hidden.
+4. Certificate ➔ Lesson: Open Certificate view ➔ return to Academy ➔ open a lesson. Confirm Certificate view is completely hidden.
+5. Multi-View Stack Check: Open Flashcards, open Certificate, then navigate back and open a lesson. Confirm no stray containers or scrollbars remain visible.
+
+--------------------------------------------------
+17. EXPORTS
+--------------------------------------------------
+
+- ACTION: Run an analysis in "🔍 Analyzer". Scroll to the top of the Results Panel.
+
+1. PDF Export:
+- ACTION: Click "📄 Export PDF".
+- EXPECTED RESULT: Browser downloads `devmate-report.pdf` (or `devmate-report.txt` if fpdf2 python package is missing). File contains title, readiness score, status, and listed findings.
+
+2. CSV Export:
+- ACTION: Click "📊 Export CSV".
+- EXPECTED RESULT: Browser downloads `devmate-report.csv` formatted with headers: ID, Source, Severity, Category, Description, Weight.
+
+3. JSON Export:
+- ACTION: Click "💾 Export JSON".
+- EXPECTED RESULT: Browser downloads `devmate-report.json` containing complete structured payload (score, status, findings, governance, roadmap).
+
+--------------------------------------------------
+18. ERROR / EDGE CASE TESTS
+--------------------------------------------------
+
+1. Empty Input (Analyzer):
+- ACTION: Clear both textareas in "🔍 Analyzer" and click "Analyze Deployment Readiness".
+- EXPECTED RESULT: Red warning toast/error message: "Please provide a Dockerfile or Kubernetes manifest to analyze."
+
+2. Invalid YAML (Kubernetes):
+- ACTION: Paste broken YAML (e.g. `kind: Deployment \n   bad_indentation`) and analyze.
+- EXPECTED RESULT: Critical finding `K8S900`: "Invalid YAML syntax — the manifest cannot be parsed". Readiness score drops significantly.
+
+3. Invalid Image Ref (Image Tab):
+- ACTION: Enter invalid characters like `nginx; rm -rf /` in image input and click "Analyze Image".
+- EXPECTED RESULT: Error message: "⚠️ Invalid image reference. Use format: name:tag". (Backend regex rejects invalid characters without subprocess invocation).
+
+--------------------------------------------------
+19. SESSION-ONLY BEHAVIOR
+--------------------------------------------------
+
+The following state is held strictly in volatile browser memory (`script.js` variables) and will reset upon page reload (`F5`):
+- Academy lesson mastery (0 / 12)
+- Total XP accumulated
+- Unlocked badges
+- Certificate unlock status & generated Certificate ID
+- Active verification query state
+
+The following behavior should NOT be expected to persist across restarts:
+- Saving progress to a database (DevMate operates client-side / session-only without persistent DB until Phase 3).
+
+--------------------------------------------------
+20. FINAL MASTER CHECKLIST
+--------------------------------------------------
+
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   1. Topbar navigation & Beginner mode toggle
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   2. Dockerfile analysis (DF001–DF005)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   3. Kubernetes analysis (K8S001–K8S005, K8S900, K8S902)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   4. Readiness score ring & category breakdown
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   5. Improvement roadmap & governance checklist
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   6. Academy 12-lesson grid & filters (All/Dockerfile/K8s/Mastered)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   7. Academy search bar & category/difficulty dropdowns
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   8. Lesson detail view (plain, technical, why, code comparison)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   9. Analyzer → Academy "Take Lesson" bridge
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   10. Interactive quiz, mastery update, and XP award (+10 XP)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   11. Analyzer inline quiz synchronization
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   12. Copy-Fix buttons ("Copy Fix", "Copy Code") & toast feedback
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   13. Badges unlocking (Docker Master, K8s Architect, Grandmaster, XP Collector)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   14. Flashcards deck, 3D flip card, shuffle, progress tracker
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   15. Flashcards completion screen & duplicate XP protection
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   16. Academy Certificate locked/unlocked state & confetti
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   17. Certificate editable recipient name & print stylesheet
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   18. Certificate Verification widget (empty, valid, invalid, session expiry)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   19. Confetti particle celebration & 1500ms cooldown guard
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   20. Docker Image Analysis mode (metadata, env masking, security IMG rules)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   21. Trivy CVE vulnerability scan integration & fallback notice
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   22. View navigation regression tests (no view stacking bugs)
+[ ] PASS   [ ] FAIL   [ ] NOT TESTED   23. Report exports (PDF, CSV, JSON)
+
+--------------------------------------------------
+21. BUG REPORT TEMPLATE
+--------------------------------------------------
+
+If you discover an issue during testing, copy and fill out the template below:
+
+Feature:
+Steps to reproduce:
+1. 
+2. 
+3. 
+Expected result:
+Actual result:
+Browser:
+Docker installed/running: (Yes / No / N/A)
+Trivy installed: (Yes / No / N/A)
+Screenshot:
+Additional notes:
+
+==================================================
+END OF TESTING MANUAL
+==================================================

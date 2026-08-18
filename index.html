@@ -28,6 +28,7 @@
   <nav class="tabs" aria-label="Main">
     <button class="tab-btn active" data-tab="analyzer">🔍 Analyzer</button>
     <button class="tab-btn" data-tab="academy">🎓 Academy</button>
+    <button class="tab-btn" data-tab="image">📦 Image</button>
   </nav>
   <label class="beginner-toggle">
     <input type="checkbox" id="beginnerMode" checked>
@@ -339,6 +340,61 @@
       </div>
     </div>
   </section>
+
+  <!-- ═══ DOCKER IMAGE ANALYSIS TAB ═══ -->
+  <section id="tab-image" class="tab-panel hidden">
+
+    <section class="input-panel">
+      <div class="section-header">
+        <div class="section-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="10" r="2"/></svg>
+        </div>
+        <div>
+          <h2>Inspect Docker Image</h2>
+          <p class="hint">Inspect a locally available Docker image — view metadata, security posture, and optionally run Trivy CVE scanning.</p>
+        </div>
+      </div>
+
+      <div class="image-input-row">
+        <input type="text" id="imageRefInput" class="image-ref-input"
+               placeholder="e.g. nginx:1.27  ·  python:3.12-slim  ·  myapp:latest"
+               autocomplete="off" spellcheck="false">
+        <button id="analyzeImageBtn" class="btn-primary image-analyze-btn">
+          <span class="btn-icon">🔌</span>
+          <span id="imageBtnText" class="btn-text">Analyze Image</span>
+          <span id="imageBtnSpinner" class="btn-spinner hidden"></span>
+        </button>
+      </div>
+      <p class="hint image-note">The image must exist locally. Run <code>docker pull &lt;name&gt;</code> first if needed.
+        Trivy is used automatically for CVE scanning if installed.</p>
+      <p id="imageErrorMsg" class="error-msg"></p>
+    </section>
+
+    <section id="imageResultsPanel" class="results-panel hidden">
+      <div id="imageLoadingSkeleton" class="skeleton-container hidden">
+        <div class="skeleton-score">
+          <div class="skeleton-circle"></div>
+          <div class="skeleton-lines">
+            <div class="skeleton-line w-60"></div>
+            <div class="skeleton-line w-30"></div>
+            <div class="skeleton-line w-50"></div>
+          </div>
+        </div>
+        <div class="skeleton-cols">
+          <div class="skeleton-col">
+            <div class="skeleton-card"></div>
+            <div class="skeleton-card"></div>
+          </div>
+          <div class="skeleton-col">
+            <div class="skeleton-card"></div>
+          </div>
+        </div>
+      </div>
+      <div id="imageResultsContent" class="results-content hidden"></div>
+    </section>
+
+  </section>
+
 </main>
 
 <footer>

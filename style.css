@@ -2135,6 +2135,13 @@ footer {
   background: rgba(99, 102, 241, 0.08);
 }
 
+/* Monospace utility for Certificate ID / hash display in verification results */
+.font-mono {
+  font-family: 'Fira Mono', 'Consolas', 'Courier New', monospace;
+  font-size: 0.9em;
+  letter-spacing: 0.03em;
+}
+
 /* ─── CERTIFICATE PAGE VIEW ────────────────────────────── */
 .certificate-view {
   margin-top: 4px;
@@ -2340,3 +2347,244 @@ footer {
 }
 
 
+/* ─── DOCKER IMAGE ANALYSIS STYLES ────────────────────────── */
+.image-input-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  align-items: center;
+}
+
+.image-ref-input {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-m);
+  padding: 12px 16px;
+  font-family: 'Fira Code', 'Fira Mono', monospace;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--duration-f), box-shadow var(--duration-f);
+}
+
+.image-ref-input:focus {
+  border-color: var(--brand-1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.image-analyze-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.image-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.img-meta-card {
+  margin-bottom: 16px;
+}
+
+.img-result-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--brand-1);
+  font-family: 'Fira Code', 'Fira Mono', monospace;
+  word-break: break-all;
+}
+
+.img-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.img-meta-item {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-s);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.img-meta-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.img-meta-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.img-env-details {
+  margin-top: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.img-env-summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.img-env-summary:hover {
+  color: var(--text-primary);
+  background: rgba(30, 41, 59, 0.8);
+}
+
+.img-env-list {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.img-env-item {
+  font-family: 'Fira Code', 'Fira Mono', monospace;
+  font-size: 12px;
+  color: #38bdf8;
+  word-break: break-all;
+}
+
+.img-sec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.img-trivy-notice {
+  padding: 14px 16px;
+  border-radius: var(--radius-s);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 12px;
+}
+
+.img-trivy-notice.info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+}
+
+.img-trivy-notice.warn {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fcd34d;
+}
+
+.trivy-count-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  margin-bottom: 16px;
+}
+
+.trivy-count-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.trivy-count-pill.critical {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+}
+
+.trivy-count-pill.high {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #fdba74;
+}
+
+.trivy-count-pill.medium {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fde047;
+}
+
+.trivy-count-pill.low {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+.trivy-count-pill.unknown {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #cbd5e1;
+}
+
+.trivy-pill-num {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.trivy-vuln-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trivy-vuln-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-s);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.trivy-vuln-id {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.trivy-vuln-pkg {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.trivy-vuln-ver {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.trivy-vuln-title {
+  color: var(--text-secondary);
+  font-size: 12px;
+  width: 100%;
+  margin-top: 2px;
+}
